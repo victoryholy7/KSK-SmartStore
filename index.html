@@ -105,7 +105,7 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/th.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
   <script>
-    var API_URL = "https://script.google.com/macros/s/วาง_DEPLOYMENT_ID_ตรงนี้/exec";
+    var API_URL = "https://script.google.com/macros/s/AKfycbzQPcDCbH1L3CSqWr4gJHx0eAGbzrDm8TmUal5SfK-WwAtv4Ii-9ORH36AuJZP6yRB9/exec";
     var state = {token:localStorage.getItem("material_token") || "",user:null,settings:null,items:[],page:"dashboard",pageData:null,requestTab:"mine",pageNumber:1,filters:{},detail:null};
     var modal = null;
     var menu = [{id:"dashboard",label:"Dashboard",icon:"fa-chart-pie",roles:["ADMIN","APPROVER","OFFICER","USER"]},{id:"receipts",label:"รับวัสดุเข้า",icon:"fa-box-open",roles:["ADMIN","OFFICER"]},{id:"requests",label:"ขอเบิก / อนุมัติ / จ่าย",icon:"fa-clipboard-check",roles:["ADMIN","APPROVER","OFFICER","USER"]},{id:"returns",label:"คืนวัสดุ",icon:"fa-rotate-left",roles:["ADMIN","OFFICER"]},{id:"registry",label:"ทะเบียนวัสดุและ LOT",icon:"fa-boxes-stacked",roles:["ADMIN","APPROVER","OFFICER"]},{id:"stockcard",label:"Stock Card",icon:"fa-table-list",roles:["ADMIN","APPROVER","OFFICER"]},{id:"reports",label:"รายงาน",icon:"fa-chart-column",roles:["ADMIN","APPROVER","OFFICER"]},{id:"admin",label:"จัดการระบบ",icon:"fa-gear",roles:["ADMIN"]}];

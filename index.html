@@ -105,6 +105,7 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/th.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
   <script>
+    var API_URL = "https://script.google.com/macros/s/AKfycbzQPcDCbH1L3CSqWr4gJHx0eAGbzrDm8TmUal5SfK-WwAtv4Ii-9ORH36AuJZP6yRB9/exec";
     var state = {token:localStorage.getItem("material_token") || "",user:null,settings:null,items:[],page:"dashboard",pageData:null,requestTab:"mine",pageNumber:1,filters:{},detail:null};
     var modal = null;
     var menu = [{id:"dashboard",label:"Dashboard",icon:"fa-chart-pie",roles:["ADMIN","APPROVER","OFFICER","USER"]},{id:"receipts",label:"รับวัสดุเข้า",icon:"fa-box-open",roles:["ADMIN","OFFICER"]},{id:"requests",label:"ขอเบิก / อนุมัติ / จ่าย",icon:"fa-clipboard-check",roles:["ADMIN","APPROVER","OFFICER","USER"]},{id:"returns",label:"คืนวัสดุ",icon:"fa-rotate-left",roles:["ADMIN","OFFICER"]},{id:"registry",label:"ทะเบียนวัสดุและ LOT",icon:"fa-boxes-stacked",roles:["ADMIN","APPROVER","OFFICER"]},{id:"stockcard",label:"Stock Card",icon:"fa-table-list",roles:["ADMIN","APPROVER","OFFICER"]},{id:"reports",label:"รายงาน",icon:"fa-chart-column",roles:["ADMIN","APPROVER","OFFICER"]},{id:"admin",label:"จัดการระบบ",icon:"fa-gear",roles:["ADMIN"]}];
@@ -116,61 +117,7 @@
     function uuid() { return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + String(Math.random()).slice(2); }
     function badge(s) { var names={DRAFT:"ร่าง",PENDING:"รออนุมัติ",APPROVED_ISSUED:"อนุมัติและจ่ายแล้ว",REJECTED:"ไม่อนุมัติ",CANCELLED:"ยกเลิก",COMPLETED:"เสร็จสิ้น",PROCESSING:"กำลังบันทึก",ACTIVE:"ใช้งาน",INACTIVE:"ปิดใช้งาน",NEAR_EXPIRY:"ใกล้หมดอายุ"}; return '<span class="badge rounded-pill badge-' + esc(s) + '">' + esc(names[s] || s) + '</span>'; }
     function overlay(show) { if ($.LoadingOverlay) { if (show) $.LoadingOverlay("show",{image:"",fontawesome:"fa fa-spinner fa-spin",fontawesomeColor:"#6958d8",size:35,background:"rgba(244,246,252,.5)"}); else $.LoadingOverlay("hide"); } }
-    // URL ของ Apps Script Web App (ลงท้ายด้วย /exec) ใส่ URL ที่ได้หลัง Deploy
-    var GAS_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbzQPcDCbH1L3CSqWr4gJHx0eAGbzrDm8TmUal5SfK-WwAtv4Ii-9ORH36AuJZP6yRB9/exec";
-    var bridgeFrame = null, bridgeReady = false, bridgeQueue = [], bridgePending = {}, bridgeSeq = 0;
-    function bridgeOriginFromUrl(url) { try { return new URL(url).origin; } catch (e) { return ""; } }
-    function ensureBridge() {
-      if (bridgeFrame) return;
-      if (!GAS_BRIDGE_URL || GAS_BRIDGE_URL.indexOf("PASTE_YOUR_") === 0) throw new Error("กรุณาตั้งค่า GAS_BRIDGE_URL ในไฟล์ index.html ให้เป็น URL ของ Apps Script Web App ก่อนใช้งาน");
-      bridgeFrame = document.createElement("iframe");
-      bridgeFrame.title = "Apps Script API Bridge";
-      bridgeFrame.setAttribute("aria-hidden", "true");
-      bridgeFrame.style.cssText = "position:fixed;width:1px;height:1px;left:-10px;bottom:-10px;border:0;opacity:0;pointer-events:none";
-      bridgeFrame.src = GAS_BRIDGE_URL + (GAS_BRIDGE_URL.indexOf("?") >= 0 ? "&" : "?") + "bridge=1";
-      document.body.appendChild(bridgeFrame);
-    }
-    function flushBridgeQueue() {
-      if (!bridgeReady || !bridgeFrame || !bridgeFrame.contentWindow) return;
-      while (bridgeQueue.length) bridgeFrame.contentWindow.postMessage(bridgeQueue.shift(), "*");
-    }
-    window.addEventListener("message", function(event) {
-      if (!bridgeFrame || event.source !== bridgeFrame.contentWindow || !event.data) return;
-      var data = event.data;
-      if (data.type === "MATERIAL_BRIDGE_READY") { bridgeReady = true; flushBridgeQueue(); return; }
-      if (data.type !== "MATERIAL_API_RESPONSE" || !data.id || !bridgePending[data.id]) return;
-      var pending = bridgePending[data.id]; delete bridgePending[data.id];
-      if (pending.loading !== false) overlay(false);
-      if (data.error) {
-        var message = data.error.message || String(data.error);
-        if (message.indexOf("SESSION_EXPIRED") >= 0) { localStorage.removeItem("material_token"); state.token = ""; showLogin(); }
-        Swal.fire({icon:"error",title:"ดำเนินการไม่สำเร็จ",text:message,confirmButtonColor:"#6958d8"});
-        pending.reject(new Error(message));
-      } else pending.resolve(data.result);
-    });
-    function call(action,payload,loading) {
-      if (loading !== false) overlay(true);
-      return new Promise(function(resolve,reject) {
-        try {
-          ensureBridge();
-          var id = "mapi_" + (++bridgeSeq) + "_" + Date.now();
-          bridgePending[id] = {resolve:resolve,reject:reject,loading:loading};
-          var message = {type:"MATERIAL_API_REQUEST",id:id,action:action,payload:payload || {},token:state.token};
-          if (bridgeReady && bridgeFrame.contentWindow) bridgeFrame.contentWindow.postMessage(message,"*");
-          else bridgeQueue.push(message);
-          window.setTimeout(function() {
-            if (!bridgePending[id]) return;
-            delete bridgePending[id];
-            if (loading !== false) overlay(false);
-            reject(new Error("เชื่อมต่อ Apps Script ไม่สำเร็จ กรุณาตรวจสอบ URL, การ Deploy และค่าโดเมน GitHub Pages"));
-          }, 45000);
-        } catch (error) {
-          if (loading !== false) overlay(false);
-          Swal.fire({icon:"error",title:"เชื่อมต่อระบบไม่ได้",text:error.message || String(error),confirmButtonColor:"#6958d8"});
-          reject(error);
-        }
-      });
-    }
+    function call(action,payload,loading) { if (loading !== false) overlay(true); return fetch(API_URL,{method:"POST",redirect:"follow",body:JSON.stringify({action:action,payload:payload || {},token:state.token})}).then(function(r){return r.json();}).then(function(res){ if (loading !== false) overlay(false); if (!res.ok) throw new Error(res.error || "เกิดข้อผิดพลาด"); return res.data; }).catch(function(error){ if (loading !== false) overlay(false); var message=error && error.message ? error.message : String(error); if (message.indexOf("SESSION_EXPIRED") >= 0) { localStorage.removeItem("material_token"); state.token=""; showLogin(); } else if (message === "Failed to fetch") message="เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจสอบ API_URL และการ Deploy"; Swal.fire({icon:"error",title:"ดำเนินการไม่สำเร็จ",text:message,confirmButtonColor:"#6958d8"}); throw error; }); }
     function alertOk(message) { return Swal.fire({icon:"success",title:"สำเร็จ",text:message,confirmButtonColor:"#6958d8",timer:1800}); }
     function confirmDo(text) { return Swal.fire({icon:"question",title:"ยืนยันการดำเนินการ",text:text,showCancelButton:true,confirmButtonText:"ยืนยัน",cancelButtonText:"ยกเลิก",confirmButtonColor:"#6958d8"}).then(function(x){return x.isConfirmed;}); }
     function showLogin() { $("#appShell").hide(); $("#loginPage").css("display","flex"); }

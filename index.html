@@ -117,7 +117,7 @@
     function badge(s) { var names={DRAFT:"ร่าง",PENDING:"รออนุมัติ",APPROVED_ISSUED:"อนุมัติและจ่ายแล้ว",REJECTED:"ไม่อนุมัติ",CANCELLED:"ยกเลิก",COMPLETED:"เสร็จสิ้น",PROCESSING:"กำลังบันทึก",ACTIVE:"ใช้งาน",INACTIVE:"ปิดใช้งาน",NEAR_EXPIRY:"ใกล้หมดอายุ"}; return '<span class="badge rounded-pill badge-' + esc(s) + '">' + esc(names[s] || s) + '</span>'; }
     function overlay(show) { if ($.LoadingOverlay) { if (show) $.LoadingOverlay("show",{image:"",fontawesome:"fa fa-spinner fa-spin",fontawesomeColor:"#6958d8",size:35,background:"rgba(244,246,252,.5)"}); else $.LoadingOverlay("hide"); } }
     // URL ของ Apps Script Web App (ลงท้ายด้วย /exec) ใส่ URL ที่ได้หลัง Deploy
-    var GAS_BRIDGE_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_EXEC_URL_HERE";
+    var GAS_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbzQPcDCbH1L3CSqWr4gJHx0eAGbzrDm8TmUal5SfK-WwAtv4Ii-9ORH36AuJZP6yRB9/exec";
     var bridgeFrame = null, bridgeReady = false, bridgeQueue = [], bridgePending = {}, bridgeSeq = 0;
     function bridgeOriginFromUrl(url) { try { return new URL(url).origin; } catch (e) { return ""; } }
     function ensureBridge() {

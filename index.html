@@ -208,11 +208,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 
 <script>
 // =========================================================================
-// 1. ตรวจสอบให้แน่ใจว่าใส่ลิงก์ Web App (ที่ลงท้ายด้วย /exec) ถูกต้องแล้ว
+// 1. ใส่ลิงก์ Web App (ที่ลงท้ายด้วย /exec) จาก Google Apps Script ของคุณ
 const API_URL = 'https://script.google.com/macros/s/AKfycbzYuCCOW7uC-3Z1zOjh_JnXRFQwGTfdSQ4AOLHlULyeFXFyp1Qa26b5lzg5Ko7KTEcRLw/exec';
 
-// 2. ใส่ลิงก์รูปโลโก้โรงพยาบาล (ถ้ามี)
-const LOGO_URL = ''; 
+// 2. ลิงก์รูปโลโก้โรงพยาบาลของคุณ (แปลงจาก Google Drive เรียบร้อยแล้ว)
+const LOGO_URL = 'https://lh3.googleusercontent.com/d/1x0rXU-2RmKTeqKA-5lBZB_Q2-TH59iam'; 
 // =========================================================================
 
 const LS = { role: 'ksk_role', token: 'ksk_token', snap: 'ksk_snap', me: 'ksk_me' };
@@ -255,13 +255,14 @@ const findReq = id => S.snap.requests.find(r => r.id === id);
 
 /* ---------- UI พื้นฐาน ---------- */
 let busyN = 0;
-function busy(on) { busyN = Math.max(0, busyN + (on ? 1 : -1)); $('#loader').hidden = busyN === 0; }
-function toast(msg, type = 'info') { const t = document.createElement('div'); t.className = 'tst ' + type; t.textContent = msg; $('#toast').appendChild(t); setTimeout(() => t.remove(), 3800); }
-function openModal(title, body, foot = '', size = '') { $('#modal').innerHTML = `<div class="mbox ${size}"><div class="mhead"><h3>${title}</h3><button class="x" data-act="closeModal"><i class="fa-solid fa-xmark"></i></button></div><div class="mbody">${body}</div>${foot ? `<div class="mfoot">${foot}</div>` : ''}</div>`; $('#modal').hidden = false; }
-function closeModal() { $('#modal').hidden = true; $('#modal').innerHTML = ''; }
+function busy(on) { busyN = Math.max(0, busyN + (on ? 1 : -1)); const l = $('#loader'); if (l) l.hidden = busyN === 0; }
+function toast(msg, type = 'info') { const t = document.createElement('div'); t.className = 'tst ' + type; t.textContent = msg; const ts = $('#toast'); if (ts) ts.appendChild(t); setTimeout(() => t.remove(), 3800); }
+function openModal(title, body, foot = '', size = '') { const m = $('#modal'); if (m) { m.innerHTML = `<div class="mbox ${size}"><div class="mhead"><h3>${title}</h3><button class="x" data-act="closeModal"><i class="fa-solid fa-xmark"></i></button></div><div class="mbody">${body}</div>${foot ? `<div class="mfoot">${foot}</div>` : ''}</div>`; m.hidden = false; } }
+function closeModal() { const m = $('#modal'); if (m) { m.hidden = true; m.innerHTML = ''; } }
 function ask(title, msg, opt = {}) {
   return new Promise(res => {
     const b = $('#askBox');
+    if (!b) return res(false);
     b.innerHTML = `<div class="mbox" style="width:min(460px,100%)"><div class="mhead"><h3>${title}</h3></div><div class="mbody"><div>${msg}</div>${opt.input ? `<input class="inp" id="askIn" style="margin-top:12px" placeholder="${esc(opt.input)}">` : ''}</div><div class="mfoot"><button class="btn light" id="askNo">ยกเลิก</button><button class="btn ${opt.cls || ''}" id="askOk">${opt.ok || 'ยืนยัน'}</button></div></div>`;
     b.hidden = false;
     const done = v => { b.hidden = true; b.innerHTML = ''; res(v); };
@@ -329,7 +330,9 @@ function setSnap(sn, save = true) {
 /* ---------- เริ่มระบบ (Safe Init) ---------- */
 document.addEventListener('DOMContentLoaded', () => {
   applyLogo();
-  $('#adminForm').addEventListener('submit', loginAdmin);
+  const adminForm = $('#adminForm');
+  if (adminForm) adminForm.addEventListener('submit', loginAdmin);
+  
   const role = localStorage.getItem(LS.role);
   if (!role) { showLogin(); return; }
   
@@ -342,19 +345,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   } catch (e) {}
 
-  call('bootstrap', {}, !S.snap).then(r => {
+  call('bootstrap', {}, !S.snap.items.length).then(r => {
     if (role === 'ADMIN' && !r.admin) { toast('หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่', 'bad'); return logoutLocal(); }
     setSnap(r.snap);
-    showApp();
+    if ($('#login').hidden) showApp(); else showLogin();
   }).catch(e => {
     if (!S.snap.items.length) showLogin();
     onErr(e);
   });
 });
 
-function showLogin() { $('#app').hidden = true; $('#login').hidden = false; applyLogo(); }
+function showLogin() { 
+  const app = $('#app'), login = $('#login');
+  if (app) app.hidden = true; 
+  if (login) login.hidden = false; 
+  applyLogo(); 
+}
 function showApp() {
-  $('#login').hidden = true; $('#app').hidden = false; applyLogo();
+  const app = $('#app'), login = $('#login');
+  if (login) login.hidden = true; 
+  if (app) app.hidden = false; 
+  applyLogo();
   const navEl = $('#nav');
   if (navEl) {
     navEl.innerHTML = MENU.filter(m => m.roles.includes(S.role)).map(m => `<a data-act="go" data-page="${m.id}"><i class="fa-solid ${m.icon}"></i> ${m.label}</a>`).join('');
@@ -366,20 +377,20 @@ function showApp() {
 async function enterUser() {
   S.role = 'USER'; S.token = '';
   localStorage.setItem(LS.role, 'USER'); localStorage.removeItem(LS.token);
-  try { const r = await call('bootstrap', {}); setSnap(r.snap); S.page = 'dashboard'; showApp(); }
-  catch (e) { showApp(); }
+  try { const r = await call('bootstrap', {}); setSnap(r.snap); } catch (e) {}
+  S.page = 'dashboard'; showApp();
 }
 async function loginAdmin(e) {
-  e.preventDefault(); $('#lgErr').textContent = '';
+  e.preventDefault(); const errEl = $('#lgErr'); if (errEl) errEl.textContent = '';
   const u = $('#aUser').value.trim(), p = $('#aPass').value;
-  if (!u || !p) { $('#lgErr').textContent = 'กรุณากรอก Username และ Password'; return; }
+  if (!u || !p) { if (errEl) errEl.textContent = 'กรุณากรอก Username และ Password'; return; }
   try {
     const r = await call('login', { username: u, password: p });
     S.role = 'ADMIN'; S.token = r.token;
     localStorage.setItem(LS.role, 'ADMIN'); localStorage.setItem(LS.token, r.token);
     setSnap(r.snap); $('#aPass').value = ''; S.page = 'dashboard'; showApp();
     toast('ยินดีต้อนรับผู้ดูแลระบบ', 'ok');
-  } catch (err) { $('#lgErr').textContent = err.message; }
+  } catch (err) { if (errEl) errEl.textContent = err.message; }
 }
 function logoutLocal() {
   S.role = null; S.token = ''; S.page = 'dashboard';

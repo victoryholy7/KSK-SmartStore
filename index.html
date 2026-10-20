@@ -143,7 +143,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 <body>
 
 <!-- ============ หน้า Login ============ -->
-<section id="login" hidden>
+<section id="login">
   <span class="bubble" style="width:240px;height:240px;left:-70px;top:-70px"></span>
   <span class="bubble" style="width:160px;height:160px;right:8%;top:10%;animation-delay:2s"></span>
   <span class="bubble" style="width:300px;height:300px;right:-90px;bottom:-110px;animation-delay:4s"></span>
@@ -208,15 +208,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 
 <script>
 // =========================================================================
-// 1. ตั้งค่าลิงก์ Web App (ที่ลงท้ายด้วย /exec) จาก Google Apps Script ของคุณ
+// 1. ตรวจสอบให้แน่ใจว่าใส่ลิงก์ Web App (ที่ลงท้ายด้วย /exec) ถูกต้องแล้ว
 const API_URL = 'https://script.google.com/macros/s/AKfycbzYuCCOW7uC-3Z1zOjh_JnXRFQwGTfdSQ4AOLHlULyeFXFyp1Qa26b5lzg5Ko7KTEcRLw/exec';
 
-// 2. ใส่ลิงก์รูปโลโก้โรงพยาบาลของคุณที่นี่ (ถ้ามี)
+// 2. ใส่ลิงก์รูปโลโก้โรงพยาบาล (ถ้ามี)
 const LOGO_URL = ''; 
 // =========================================================================
 
 const LS = { role: 'ksk_role', token: 'ksk_token', snap: 'ksk_snap', me: 'ksk_me' };
-const S = { role: null, token: '', snap: null, page: 'dashboard', f: {}, itemById: {}, itemByLabel: {}, labelById: {}, last: null };
+const S = { role: null, token: '', snap: { settings: { categories: [], departments: [], units: [] }, items: [], requests: [], returns: [], receipts: [] }, page: 'dashboard', f: {}, itemById: {}, itemByLabel: {}, labelById: {}, last: null };
 const MENU = [
   { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-pie', roles: ['ADMIN', 'USER'] },
   { id: 'receipts', label: 'รับวัสดุเข้า', icon: 'fa-box-open', roles: ['ADMIN'] },
@@ -278,7 +278,7 @@ function applyLogo() {
   if (lb2) lb2.innerHTML = html;
 }
 
-/* ---------- API (Fetch ที่ปรับให้เร็วขึ้น) ---------- */
+/* ---------- API ---------- */
 function call(action, payload, loader = true) {
   if (loader) busy(true);
   const finish = () => { if (loader) busy(false); };
@@ -310,6 +310,7 @@ function onErr(e) {
   toast(m, 'bad');
 }
 function setSnap(sn, save = true) {
+  if (!sn) return;
   S.snap = sn; S.itemById = {}; S.itemByLabel = {}; S.labelById = {};
   const seen = {};
   (sn.items || []).forEach(it => {
@@ -319,21 +320,20 @@ function setSnap(sn, save = true) {
     if (seen[lb]) lb += ' #' + (++seen[lb]); else seen[lb] = 1;
     S.itemByLabel[lb] = it.id; S.labelById[it.id] = lb;
   });
-  $('#dl-items').innerHTML = Object.keys(S.itemByLabel).map(l => `<option value="${esc(l)}">`).join('');
-  $('#dl-depts').innerHTML = (sn.settings.departments || []).map(l => `<option value="${esc(l)}">`).join('');
-  $('#dl-units').innerHTML = (sn.settings.units || []).map(l => `<option value="${esc(l)}">`).join('');
+  const elItems = $('#dl-items'); if (elItems) elItems.innerHTML = Object.keys(S.itemByLabel).map(l => `<option value="${esc(l)}">`).join('');
+  const elDepts = $('#dl-depts'); if (elDepts && sn.settings.departments) elDepts.innerHTML = sn.settings.departments.map(l => `<option value="${esc(l)}">`).join('');
+  const elUnits = $('#dl-units'); if (elUnits && sn.settings.units) elUnits.innerHTML = sn.settings.units.map(l => `<option value="${esc(l)}">`).join('');
   if (save) { try { localStorage.setItem(LS.snap, JSON.stringify({ role: S.role, snap: sn })); } catch (e) {} }
 }
 
-/* ---------- เริ่มระบบ (Instant Load) ---------- */
+/* ---------- เริ่มระบบ (Safe Init) ---------- */
 document.addEventListener('DOMContentLoaded', () => {
   applyLogo();
   $('#adminForm').addEventListener('submit', loginAdmin);
   const role = localStorage.getItem(LS.role);
-  if (!role) return showLogin();
-  S.role = role; S.token = localStorage.getItem(LS.token) || '';
+  if (!role) { showLogin(); return; }
   
-  // โหลดข้อมูลจากแคชเครื่องทันทีเพื่อให้หน้าเว็บแสดงผลไวที่สุด
+  S.role = role; S.token = localStorage.getItem(LS.token) || '';
   try {
     const cached = JSON.parse(localStorage.getItem(LS.snap) || 'null');
     if (cached && cached.role === role && cached.snap) {
@@ -342,26 +342,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   } catch (e) {}
 
-  // โหลดข้อมูลล่าสุดจากเซิร์ฟเวอร์เบื้องหลัง
   call('bootstrap', {}, !S.snap).then(r => {
     if (role === 'ADMIN' && !r.admin) { toast('หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่', 'bad'); return logoutLocal(); }
     setSnap(r.snap);
-    if ($('#modal').hidden) showApp();
-  }).catch(e => { if (!S.snap) showLogin(); onErr(e); });
+    showApp();
+  }).catch(e => {
+    if (!S.snap.items.length) showLogin();
+    onErr(e);
+  });
 });
 
 function showLogin() { $('#app').hidden = true; $('#login').hidden = false; applyLogo(); }
 function showApp() {
   $('#login').hidden = true; $('#app').hidden = false; applyLogo();
-  $('#nav').innerHTML = MENU.filter(m => m.roles.includes(S.role)).map(m => `<a data-act="go" data-page="${m.id}"><i class="fa-solid ${m.icon}"></i> ${m.label}</a>`).join('');
-  $('#whoName').textContent = isAdmin() ? 'ผู้ดูแลระบบ (Admin)' : 'ผู้ใช้งานทั่วไป';
+  const navEl = $('#nav');
+  if (navEl) {
+    navEl.innerHTML = MENU.filter(m => m.roles.includes(S.role)).map(m => `<a data-act="go" data-page="${m.id}"><i class="fa-solid ${m.icon}"></i> ${m.label}</a>`).join('');
+  }
+  const whoEl = $('#whoName');
+  if (whoEl) whoEl.textContent = isAdmin() ? 'ผู้ดูแลระบบ (Admin)' : 'ผู้ใช้งานทั่วไป';
   go(S.page);
 }
 async function enterUser() {
   S.role = 'USER'; S.token = '';
   localStorage.setItem(LS.role, 'USER'); localStorage.removeItem(LS.token);
   try { const r = await call('bootstrap', {}); setSnap(r.snap); S.page = 'dashboard'; showApp(); }
-  catch (e) { onErr(e); }
+  catch (e) { showApp(); }
 }
 async function loginAdmin(e) {
   e.preventDefault(); $('#lgErr').textContent = '';
@@ -376,7 +382,7 @@ async function loginAdmin(e) {
   } catch (err) { $('#lgErr').textContent = err.message; }
 }
 function logoutLocal() {
-  S.role = null; S.token = ''; S.snap = null; S.page = 'dashboard';
+  S.role = null; S.token = ''; S.page = 'dashboard';
   [LS.role, LS.token, LS.snap].forEach(k => localStorage.removeItem(k));
   closeModal(); showLogin();
 }
@@ -389,7 +395,7 @@ const PAGES = {
   returns: { render: pgReturns, after: fillReturns },
   registry: { render: pgRegistry, after: fillRegistry },
   stockcard: { render: pgStockcard, after: () => { if (S.f.cardAuto) { S.f.cardAuto = false; runCard(); } } },
-  report: { render: pgReport, after: () => { $('#rpEnd').addEventListener('change', e => { if (e.target.value) $('#rpStart').value = e.target.value.slice(0, 8) + '01'; }); } },
+  report: { render: pgReport, after: () => { const el = $('#rpEnd'); if (el) el.addEventListener('change', e => { if (e.target.value) $('#rpStart').value = e.target.value.slice(0, 8) + '01'; }); } },
   settings: { render: pgSettings }
 };
 const FILL = { registry: fillRegistry, requests: fillRequests, returns: fillReturns, receipts: fillReceipts };
@@ -397,11 +403,14 @@ function go(page) {
   const m = MENU.find(x => x.id === page && x.roles.includes(S.role)) || MENU[0];
   S.page = m.id;
   $$('#nav a').forEach(a => a.classList.toggle('on', a.dataset.page === m.id));
-  $('#pageTitle').innerHTML = `<i class="fa-solid ${m.icon}"></i> ${m.label}`;
+  const pt = $('#pageTitle'); if (pt) pt.innerHTML = `<i class="fa-solid ${m.icon}"></i> ${m.label}`;
   const P = PAGES[m.id];
-  $('#view').innerHTML = P.render();
-  if (P.after) P.after();
-  $('#side').classList.remove('open');
+  const view = $('#view');
+  if (view && P) {
+    view.innerHTML = P.render();
+    if (P.after) P.after();
+  }
+  const side = $('#side'); if (side) side.classList.remove('open');
 }
 
 /* ---------- Event delegation ---------- */
@@ -481,6 +490,7 @@ function fillRegistry() {
   if (q) list = list.filter(i => (i.name + ' ' + (i.code || '')).toLowerCase().includes(q));
   list.sort((a, b) => a.name.localeCompare(b.name, 'th'));
   const tb = $('#regTbl tbody');
+  if (!tb) return;
   if (!list.length) { tb.innerHTML = '<tr><td colspan="10" class="empty">ไม่พบรายการ</td></tr>'; $('#regCount').textContent = ''; return; }
   tb.innerHTML = list.slice(0, 1500).map((i, ix) => isAdmin()
     ? `<tr><td>${esc(i.code)}</td><td><b>${esc(i.name)}</b></td><td>${esc(i.category)}</td><td>${esc(i.unit)}</td><td class="r"><b>${fmtQ(i.balance)}</b></td><td class="r">${fmtM(i.price)}</td><td class="r">${fmtM(i.value)}</td><td>${esc(i.location)}</td><td>${stockBadge(i)}</td>
@@ -565,7 +575,8 @@ function pgReceipts() {
 function fillReceipts() {
   const q = (S.f.rcq || '').toLowerCase();
   const list = (S.snap.receipts || []).filter(r => !q || (r.item_name + ' ' + r.doc_no + ' ' + r.party).toLowerCase().includes(q));
-  $('#rcvTbl tbody').innerHTML = list.length ? list.map(r => `<tr><td>${thShort(r.date)}</td><td>${esc(r.doc_no)}</td><td>${esc(r.party)}</td><td>${esc(r.item_name)}</td><td class="r">${fmtQ(r.qty)} ${esc(r.unit)}</td><td class="r">${fmtM(r.unit_price)}</td><td class="r">${fmtM(r.amount)}</td><td>${r.source === 'OPEN' ? '<span class="badge b-info">ยอดยกมา</span>' : '<span class="badge b-pink">รับเข้า</span>'}</td><td>${r.deletable ? `<button class="btn sm red" data-act="delRcv" data-id="${r.id}"><i class="fa-solid fa-trash"></i></button>` : ''}</td></tr>`).join('') : '<tr><td colspan="9" class="empty">ยังไม่มีรายการรับเข้า</td></tr>';
+  const tb = $('#rcvTbl tbody');
+  if (tb) tb.innerHTML = list.length ? list.map(r => `<tr><td>${thShort(r.date)}</td><td>${esc(r.doc_no)}</td><td>${esc(r.party)}</td><td>${esc(r.item_name)}</td><td class="r">${fmtQ(r.qty)} ${esc(r.unit)}</td><td class="r">${fmtM(r.unit_price)}</td><td class="r">${fmtM(r.amount)}</td><td>${r.source === 'OPEN' ? '<span class="badge b-info">ยอดยกมา</span>' : '<span class="badge b-pink">รับเข้า</span>'}</td><td>${r.deletable ? `<button class="btn sm red" data-act="delRcv" data-id="${r.id}"><i class="fa-solid fa-trash"></i></button>` : ''}</td></tr>`).join('') : '<tr><td colspan="9" class="empty">ยังไม่มีรายการรับเข้า</td></tr>';
 }
 function rcvForm() {
   openModal('บันทึกรับวัสดุเข้า', `<form id="fRcv" class="fg">
@@ -613,7 +624,8 @@ function fillRequests() {
   let list = S.snap.requests;
   if (s) list = list.filter(r => r.status === s);
   if (q) list = list.filter(r => (r.doc_no + ' ' + r.department + ' ' + r.requester + ' ' + r.items.map(i => i.name).join(' ')).toLowerCase().includes(q));
-  $('#reqTbl tbody').innerHTML = list.length ? list.map(r => `<tr><td><b>${esc(r.doc_no)}</b></td><td>${thShort(r.date)}</td><td>${esc(r.department)}</td><td>${esc(r.requester)}</td><td class="c">${r.items.length}</td><td>${badge(REQ_ST, r.status)}</td><td><div class="acts">${reqActs(r)}</div></td></tr>`).join('') : '<tr><td colspan="7" class="empty">ไม่พบใบเบิก</td></tr>';
+  const tb = $('#reqTbl tbody');
+  if (tb) tb.innerHTML = list.length ? list.map(r => `<tr><td><b>${esc(r.doc_no)}</b></td><td>${thShort(r.date)}</td><td>${esc(r.department)}</td><td>${esc(r.requester)}</td><td class="c">${r.items.length}</td><td>${badge(REQ_ST, r.status)}</td><td><div class="acts">${reqActs(r)}</div></td></tr>`).join('') : '<tr><td colspan="7" class="empty">ไม่พบใบเบิก</td></tr>';
 }
 function reqForm(id) {
   const st = S.snap.settings, me = getMe();
@@ -712,7 +724,8 @@ function fillReturns() {
   let list = S.snap.returns || [];
   if (s) list = list.filter(r => r.status === s);
   if (q) list = list.filter(r => (r.item_name + ' ' + r.department + ' ' + r.returner).toLowerCase().includes(q));
-  $('#retTbl tbody').innerHTML = list.length ? list.map(r => `<tr><td>${thShort(r.date)}</td><td>${esc(r.department)}</td><td>${esc(r.returner)}</td><td>${esc(r.item_name)}</td><td class="r">${fmtQ(r.qty)} ${esc(r.unit)}</td><td>${esc(r.reason)}</td><td>${badge(RET_ST, r.status)}</td>${isAdmin() ? `<td><div class="acts">${r.status === 'PENDING' ? `<button class="btn sm green" data-act="acceptRet" data-id="${r.id}"><i class="fa-solid fa-check"></i> รับคืน</button><button class="btn sm red" data-act="rejectRet" data-id="${r.id}"><i class="fa-solid fa-ban"></i> ไม่รับ</button>` : ''}</div></td>` : ''}</tr>`).join('')
+  const tb = $('#retTbl tbody');
+  if (tb) tb.innerHTML = list.length ? list.map(r => `<tr><td>${thShort(r.date)}</td><td>${esc(r.department)}</td><td>${esc(r.returner)}</td><td>${esc(r.item_name)}</td><td class="r">${fmtQ(r.qty)} ${esc(r.unit)}</td><td>${esc(r.reason)}</td><td>${badge(RET_ST, r.status)}</td>${isAdmin() ? `<td><div class="acts">${r.status === 'PENDING' ? `<button class="btn sm green" data-act="acceptRet" data-id="${r.id}"><i class="fa-solid fa-check"></i> รับคืน</button><button class="btn sm red" data-act="rejectRet" data-id="${r.id}"><i class="fa-solid fa-ban"></i> ไม่รับ</button>` : ''}</div></td>` : ''}</tr>`).join('')
     : `<tr><td colspan="${isAdmin() ? 8 : 7}" class="empty">ยังไม่มีรายการคืนวัสดุ</td></tr>`;
 }
 function retForm() {

@@ -211,7 +211,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 // 1. ตั้งค่าลิงก์ Web App (ที่ลงท้ายด้วย /exec) จาก Google Apps Script ของคุณ
 const API_URL = 'https://script.google.com/macros/s/AKfycbzYuCCOW7uC-3Z1zOjh_JnXRFQwGTfdSQ4AOLHlULyeFXFyp1Qa26b5lzg5Ko7KTEcRLw/exec';
 
-// 2. ใส่ลิงก์รูปโลโก้โรงพยาบาลของคุณที่นี่ (ถ้ามี) ถ้าไม่ใส่จะแสดงไอคอนกล่องตามเดิม
+// 2. ใส่ลิงก์รูปโลโก้โรงพยาบาลของคุณที่นี่ (ถ้ามี)
 const LOGO_URL = ''; 
 // =========================================================================
 
@@ -278,7 +278,7 @@ function applyLogo() {
   if (lb2) lb2.innerHTML = html;
 }
 
-/* ---------- API (Fetch ผ่าน GitHub) ---------- */
+/* ---------- API (Fetch ที่ปรับให้เร็วขึ้น) ---------- */
 function call(action, payload, loader = true) {
   if (loader) busy(true);
   const finish = () => { if (loader) busy(false); };
@@ -286,20 +286,15 @@ function call(action, payload, loader = true) {
     finish();
     return Promise.reject(new Error('กรุณาตั้งค่า API_URL ใน index.html ให้เป็นลิงก์ Web App ที่ลงท้ายด้วย /exec'));
   }
-  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 60000);
   return fetch(API_URL, {
     method: 'POST', redirect: 'follow',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, payload: payload || {}, token: S.token }),
-    signal: ctl.signal
+    body: JSON.stringify({ action, payload: payload || {}, token: S.token })
   }).then(r => r.text()).then(t => {
-    clearTimeout(tm);
     try { return JSON.parse(t); }
     catch (e) { throw new Error('เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ กรุณาตรวจสอบว่า Deploy ตั้ง "Who has access" เป็น Anyone แล้ว'); }
   }).catch(e => {
-    clearTimeout(tm);
-    if (e.name === 'AbortError') throw new Error('หมดเวลาเชื่อมต่อ กรุณาลองใหม่');
-    if (e instanceof TypeError) throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบ API_URL และสิทธิ์ Deploy (Anyone)');
+    if (e instanceof TypeError) throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบ API_URL');
     throw e;
   }).then(r => {
     finish();
@@ -330,20 +325,31 @@ function setSnap(sn, save = true) {
   if (save) { try { localStorage.setItem(LS.snap, JSON.stringify({ role: S.role, snap: sn })); } catch (e) {} }
 }
 
-/* ---------- เริ่มระบบ ---------- */
+/* ---------- เริ่มระบบ (Instant Load) ---------- */
 document.addEventListener('DOMContentLoaded', () => {
   applyLogo();
   $('#adminForm').addEventListener('submit', loginAdmin);
   const role = localStorage.getItem(LS.role);
   if (!role) return showLogin();
   S.role = role; S.token = localStorage.getItem(LS.token) || '';
-  try { const c = JSON.parse(localStorage.getItem(LS.snap) || 'null'); if (c && c.role === role && c.snap) { setSnap(c.snap, false); showApp(); } } catch (e) {}
+  
+  // โหลดข้อมูลจากแคชเครื่องทันทีเพื่อให้หน้าเว็บแสดงผลไวที่สุด
+  try {
+    const cached = JSON.parse(localStorage.getItem(LS.snap) || 'null');
+    if (cached && cached.role === role && cached.snap) {
+      setSnap(cached.snap, false);
+      showApp();
+    }
+  } catch (e) {}
+
+  // โหลดข้อมูลล่าสุดจากเซิร์ฟเวอร์เบื้องหลัง
   call('bootstrap', {}, !S.snap).then(r => {
     if (role === 'ADMIN' && !r.admin) { toast('หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่', 'bad'); return logoutLocal(); }
     setSnap(r.snap);
     if ($('#modal').hidden) showApp();
   }).catch(e => { if (!S.snap) showLogin(); onErr(e); });
 });
+
 function showLogin() { $('#app').hidden = true; $('#login').hidden = false; applyLogo(); }
 function showApp() {
   $('#login').hidden = true; $('#app').hidden = false; applyLogo();

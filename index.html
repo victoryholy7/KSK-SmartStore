@@ -203,7 +203,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 <script>
 // =========================================================================
 // ⚠️ ใส่ลิงก์ Web App (ที่ลงท้ายด้วย /exec) ของ Google Apps Script ที่นี่ให้ถูกต้อง
-const API_URL = 'https://script.google.com/macros/s/AKfycbzi_-pfNz1XgMsOKspIiH7nj1_PoACtvt1P0f3FOik2cYMLzLlWGfF6InlqRscvRlNZ/exec';  
+const API_URL = 'https://script.google.com/macros/s/AKfycbzi_-pfNz1XgMsOKspIiH7nj1_PoACtvt1P0f3FOik2cYMLzLlWGfF6InlqRscvRlNZ/exec';
 // =========================================================================
 
 // ---- โลโก้ (ฝังเป็นไฟล์ภาพในหน้านี้เลย) ถ้าจะเปลี่ยน: ใส่ 'logo.png' (อัปโหลดไฟล์ไว้ข้าง index.html) หรือ data URI ใหม่ ----
@@ -214,7 +214,7 @@ function applyLogo() {
 }
 
 const LS = { role: 'ksk_role', token: 'ksk_token', snap: 'ksk_snap', me: 'ksk_me' };
-// ที่เก็บข้อมูลแบบปลอดภัย: ถ้าเบราว์เซอร์บล็อก localStorage (iframe / โหมดส่วนตัว / เบราว์เซอร์ในแอป) จะเก็บไว้ในหน่วยความจำแทน แทนที่จะพังทั้งหน้า
+// ที่เก็บข้อมูลแบบปลอดภัย: ถ้าเบราว์เซอร์บล็อก localStorage จะเก็บไว้ในหน่วยความจำแทน
 const MEM = {};
 const store = {
   get(k) { try { const v = localStorage.getItem(k); if (v !== null) return v; } catch (e) {} return k in MEM ? MEM[k] : null; },
@@ -277,7 +277,7 @@ function ask(title, msg, opt = {}) {
 }
 
 /* ---------- API ---------- */
-const API_TIMEOUT = 45000; // ถ้าเซิร์ฟเวอร์ไม่ตอบภายใน 45 วินาที จะตัดการรอและแจ้งข้อความ (กันหน้าค้างตลอดไป)
+const API_TIMEOUT = 45000;
 const API_OK = () => !!API_URL && /\/exec$/.test(API_URL) && !API_URL.includes('YOUR-DEPLOY-ID');
 async function call(action, payload, loader = true) {
   if (loader) busy(true);
@@ -304,6 +304,8 @@ async function call(action, payload, loader = true) {
     catch (e) { throw new Error('เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ กรุณาตรวจสอบว่า Deploy ตั้ง "Who has access" เป็น Anyone แล้ว'); }
     if (!r || !r.ok) throw new Error((r && r.error) || 'เกิดข้อผิดพลาด');
     if (r.snap) setSnap(r.snap);
+    // มีข้อความ Telegram ค้างในคิว → สั่งให้เซิร์ฟเวอร์ส่งเบื้องหลัง (ไม่ต้องรอ ไม่บล็อกหน้าจอ)
+    if (r.notify) setTimeout(() => { call('flushNotify', {}, false).catch(() => {}); }, 150);
     return r.data;
   } finally {
     clearTimeout(timer);
@@ -368,17 +370,21 @@ function loadCache(role) {
   } catch (e) {}
   return false;
 }
+/* ปลุกเซิร์ฟเวอร์ Apps Script ล่วงหน้า (ตอนอยู่หน้า Login) เพื่อให้กดเข้าใช้งานแล้วเร็วขึ้น */
+function warmServer() {
+  if (!API_OK()) return;
+  try { fetch(API_URL + '?warm=' + Date.now(), { mode: 'no-cors', cache: 'no-store' }).catch(() => {}); } catch (e) {}
+}
 document.addEventListener('DOMContentLoaded', () => {
   applyLogo();
   $('#adminForm').addEventListener('submit', loginAdmin);
   const role = store.get(LS.role);
-  if (!role) { showLogin(); if (!API_OK()) netBar('ยังไม่ได้ตั้งค่า API_URL ในไฟล์ index.html (ลิงก์ Web App ที่ลงท้ายด้วย /exec)', 'bad'); return; }
+  if (!role) { showLogin(); warmServer(); if (!API_OK()) netBar('ยังไม่ได้ตั้งค่า API_URL ในไฟล์ index.html (ลิงก์ Web App ที่ลงท้ายด้วย /exec)', 'bad'); return; }
   S.role = role; S.token = store.get(LS.token) || '';
-  if (role === 'ADMIN' && !S.token) { logoutLocal(); return; }
+  if (role === 'ADMIN' && !S.token) { logoutLocal(); warmServer(); return; }
   loadCache(role);
   showApp();      // เปิดหน้าทันทีจากแคชในเครื่อง ไม่รอ API
-  // ดึงข้อมูลล่าสุดเบื้องหลัง โดยไม่บล็อกการใช้งานหน้าเว็บ
-  syncData(false);
+  syncData(false); // ดึงข้อมูลล่าสุดเบื้องหลัง โดยไม่บล็อกการใช้งานหน้าเว็บ
 });
 function showLogin() { $('#app').hidden = true; $('#login').hidden = false; }
 function showApp() {
@@ -391,7 +397,7 @@ function enterUser() {
   S.role = 'USER'; S.token = '';
   store.set(LS.role, 'USER'); store.del(LS.token);
   loadCache('USER');
-  S.page = 'dashboard'; showApp();   // เข้าหน้าระบบได้ทันที ไม่ต้องรอเซิร์ฟเวอร์
+  S.page = 'dashboard'; showApp();
   syncData(false);
 }
 async function loginAdmin(e) {
@@ -402,8 +408,12 @@ async function loginAdmin(e) {
     const r = await call('login', { username: u, password: p });
     S.role = 'ADMIN'; S.token = r.token;
     store.set(LS.role, 'ADMIN'); store.set(LS.token, r.token);
-    setSnap(r.snap); $('#aPass').value = ''; S.page = 'dashboard'; showApp();
+    $('#aPass').value = ''; S.page = 'dashboard';
+    if (r.snap) setSnap(r.snap);        // เซิร์ฟเวอร์มีแคชพร้อม ส่งข้อมูลมาด้วยเลย
+    else loadCache('ADMIN');            // ยังไม่มีแคช: เปิดหน้าก่อน (ใช้ข้อมูลเก่าในเครื่องถ้ามี) แล้วค่อยดึงเบื้องหลัง
+    showApp();
     toast('ยินดีต้อนรับผู้ดูแลระบบ', 'ok');
+    if (!r.snap) syncData(false);
   } catch (err) { $('#lgErr').textContent = err.message; }
 }
 function logoutLocal() {
@@ -445,7 +455,7 @@ document.addEventListener('click', e => {
   if (fn) {
     e.preventDefault();
     try { const p = fn(el.dataset, el); if (p && typeof p.catch === 'function') p.catch(onErr); }
-    catch (err) { console.error(err); onErr(err); }   // ถ้ามีข้อผิดพลาด จะแจ้งให้เห็น ไม่เงียบหาย
+    catch (err) { console.error(err); onErr(err); }
   }
 });
 document.addEventListener('input', e => {
@@ -567,9 +577,18 @@ function linesEditor(kind, lines) {
     <button type="button" class="btn sm light" data-act="addLine" style="margin-top:10px"><i class="fa-solid fa-plus"></i> เพิ่มรายการ</button>
     ${kind === 'rcv' ? '<div class="sum">รวมทั้งสิ้น <b class="lines-total">0.00</b> บาท</div>' : ''}</div>`;
 }
+let PICK_OPTS = '', PICK_KEY = '';
+function pickOptions() {
+  // สร้างรายการตัวเลือกวัสดุครั้งเดียวแล้วใช้ซ้ำทุกแถว (เร็วขึ้นเมื่อมีวัสดุเยอะ)
+  const labels = Object.keys(S.itemByLabel), key = labels.length + '|' + snapFp(S.snap);
+  if (key !== PICK_KEY) { PICK_OPTS = labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join(''); PICK_KEY = key; }
+  return PICK_OPTS;
+}
 function lineRow(kind, l) {
   const lb = l.item_id ? (S.labelById[l.item_id] || '') : '', it = S.itemById[l.item_id] || {};
-  const pick = `<td><select class="inp it-pick" aria-label="เลือกวัสดุ"><option value="">-- เลือกวัสดุ --</option>${Object.keys(S.itemByLabel).map(label => `<option value="${esc(label)}" ${label === lb ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></td>`;
+  let opts_ = pickOptions();
+  if (lb) opts_ = opts_.replace(`<option value="${esc(lb)}">`, `<option value="${esc(lb)}" selected>`);
+  const pick = `<td><select class="inp it-pick" aria-label="เลือกวัสดุ"><option value="">-- เลือกวัสดุ --</option>${opts_}</select></td>`;
   const del = '<td><button type="button" class="btn sm red" data-act="delLine"><i class="fa-solid fa-xmark"></i></button></td>';
   if (kind === 'rcv') return `<tr>${pick}<td><input class="inp q" type="number" min="0" step="any" value="${l.qty ?? ''}"></td><td><input class="inp pr" type="number" min="0" step="0.01" value="${l.unit_price ?? ''}"></td><td class="r amt">0.00</td>${del}</tr>`;
   return `<tr>${pick}<td class="c bal">${l.item_id ? fmtQ(it.balance) + ' ' + esc(it.unit || '') : '-'}</td><td><input class="inp q" type="number" min="0" step="any" value="${l.qty ?? ''}"></td>${del}</tr>`;
@@ -664,8 +683,9 @@ function reqForm(id) {
     <div class="c4"><label class="lb">ประเภทวัสดุ</label><select class="inp" name="category">${opts(st.categories, r.category)}</select></div>
     <div class="c6"><label class="lb">เพื่อใช้ในงาน/โครงการ</label><input class="inp" name="project" value="${esc(r.project)}"></div>
     <div class="c6"><label class="lb">ขอมอบให้ (ผู้รับสิ่งของแทน)</label><input class="inp" name="receiver" value="${esc(r.receiver)}"></div>
-    <div class="c6"><label class="lb">ชื่อผู้เบิก *</label><input class="inp" name="requester" value="${esc(r.requester)}"></div>
-    <div class="c6"><label class="lb">ตำแหน่งผู้เบิก</label><input class="inp" name="requester_position" value="${esc(r.requester_position)}"></div>
+    <div class="c12 note-box small"><i class="fa-solid fa-circle-info"></i> ชื่อและตำแหน่งที่กรอกด้านล่างจะพิมพ์ในช่อง <b>"ผู้รับพัสดุ"</b> ส่วนช่อง "ผู้เบิกพัสดุ" จะเว้นว่างไว้ให้หัวหน้าฝ่าย/กลุ่มงานลงชื่อเอง</div>
+    <div class="c6"><label class="lb">ชื่อผู้เบิก (ผู้รับพัสดุ) *</label><input class="inp" name="requester" value="${esc(r.requester)}"></div>
+    <div class="c6"><label class="lb">ตำแหน่งผู้เบิก (ผู้รับพัสดุ)</label><input class="inp" name="requester_position" value="${esc(r.requester_position)}"></div>
     ${isAdmin() ? `<div class="c6"><label class="lb">เลขที่ใบเบิก (เว้นว่าง = รันอัตโนมัติ)</label><input class="inp" name="doc_no" value="${esc(r.doc_no || '')}" placeholder="เช่น 40/69"></div>` : ''}
     <div class="c12">${linesEditor('req', lines)}</div>
     <div class="c12"><label class="lb">หมายเหตุ</label><input class="inp" name="note" value="${esc(r.note || '')}"></div></form>`,
@@ -837,7 +857,7 @@ function pgSettings() {
   return `<div class="card"><h3><i class="fa-solid fa-hospital"></i> ข้อมูลหน่วยงาน (ใช้ในแบบฟอร์ม)</h3><form id="fSet" class="fg">
     ${f('org_name', 'ชื่อหน่วยงาน')}${f('agency', 'ส่วนราชการ (ทะเบียนคุม)')}${f('unit_name', 'หน่วยงาน (ทะเบียนคุม)')}
     ${f('report_dept', 'ฝ่าย (หัวรายงานคงเหลือ)')}${f('head_name', 'หัวหน้าหน่วยพัสดุ (ผู้อนุมัติ)')}${f('head_position', 'ตำแหน่งหัวหน้าหน่วยพัสดุ')}
-    ${f('officer_name', 'เจ้าหน้าที่พัสดุ (ผู้จ่าย)')}
+    ${f('officer_name', 'เจ้าหน้าที่พัสดุ (ผู้จ่าย)')}${f('officer_position', 'ตำแหน่งเจ้าหน้าที่พัสดุ (ผู้จ่าย)')}
     <div class="c4"><label class="lb">ประเภทวัสดุ (1 บรรทัด/รายการ)</label><textarea class="inp" name="categories">${ta('categories')}</textarea></div>
     <div class="c4"><label class="lb">กลุ่มงาน/ฝ่าย (1 บรรทัด/รายการ)</label><textarea class="inp" name="departments">${ta('departments')}</textarea></div>
     <div class="c4"><label class="lb">หน่วยนับ (1 บรรทัด/รายการ)</label><textarea class="inp" name="units">${ta('units')}</textarea></div>
@@ -869,9 +889,9 @@ table.f th,table.f td{border:1px solid #000;padding:1px 4px;vertical-align:middl
 table.f th{font-weight:400;text-align:center;line-height:1.3;white-space:normal}
 .hb th{font-weight:700!important}
 .rq .hd{display:grid;grid-template-columns:1fr 62mm;align-items:end;margin-bottom:1.5mm}
-.rq tr.er td{height:7.2mm}
-.sgs{display:grid;grid-template-columns:1fr 1fr;column-gap:14mm;row-gap:7mm;margin-top:9mm;padding:0 6mm}
-.sg>div{margin:2.5mm 0}
+.rq tr.er td{height:6.8mm}
+.sgs{display:grid;grid-template-columns:1fr 1fr;column-gap:14mm;row-gap:4mm;margin-top:6mm;padding:0 6mm}
+.sg>div{margin:2mm 0}
 .rp .tt{font-size:13pt;line-height:1.6}.rp td{height:7mm}
 .sc .g3{display:grid;grid-template-columns:1fr 1.15fr .95fr;column-gap:4mm;margin-bottom:1mm;min-height:1.5em}
 .sc td{height:7mm}
@@ -880,7 +900,10 @@ table.f th{font-weight:400;text-align:center;line-height:1.3;white-space:normal}
 const pDot = (v, w) => `<span class="dot${w ? '' : ' g'}"${w ? ` style="width:${w}"` : ''}>${esc(v ?? '')}</span>`;
 const pDate = (iso, a = '15mm', b = '20mm', c = '17mm') => { const p = dParts(iso) || {}; return pDot(p.d, a) + '/' + pDot(p.m, b) + '/' + pDot(p.y, c); };
 
-/* ใบเบิกพัสดุ — ตามรูปที่ 1 */
+/* ใบเบิกพัสดุ
+   - ช่อง "ผู้เบิกพัสดุ": เว้นว่างชื่อ/ตำแหน่ง ให้หัวหน้าฝ่าย/กลุ่มงานลงชื่อเอง
+   - ช่อง "ผู้จ่ายพัสดุ" และ "ผู้รับพัสดุ": มีบรรทัดตำแหน่งทุกช่อง
+   - ช่อง "ผู้รับพัสดุ": ใช้ชื่อ/ตำแหน่งที่ผู้เบิกกรอกในฟอร์ม */
 function reqPrint(r) {
   const st = S.snap.settings, dn = String(r.doc_no || '').split('/'), iss = r.status === 'ISSUED';
   const rows = []; let n = 0;
@@ -889,8 +912,8 @@ function reqPrint(r) {
     const al = iss ? (l.alloc && l.alloc.length ? l.alloc : [{ qty: 0, unit_price: 0, amount: 0 }]) : [null];
     al.forEach((a, k) => rows.push(`<tr class="er"><td class="c">${k ? '' : n}</td><td>${k ? '' : esc(l.name)}</td><td class="c">${k ? '' : esc(l.unit)}</td><td class="c">${k ? '' : fmtQ(l.req_qty)}</td><td class="c">${a ? fmtQ(a.qty) : ''}</td><td class="r">${a ? fmtM(a.unit_price) : ''}</td><td class="r">${a ? fmtM(a.amount) : ''}</td></tr>`));
   });
-  while (rows.length < 16) rows.push('<tr class="er"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>');
-  const sg = (role, name, pos, label, date) => `<div class="sg"><div class="fl">(ลงชื่อ)${pDot('')}${role}</div><div class="c">(${pDot(name, '52mm')})</div>${pos !== null ? `<div class="fl">ตำแหน่ง${pDot(pos, '58mm')}</div>` : ''}<div class="c">${label}</div><div class="c">วันที่${pDate(date, '13mm', '18mm', '16mm')}</div></div>`;
+  while (rows.length < 15) rows.push('<tr class="er"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>');
+  const sg = (role, name, pos, label, date) => `<div class="sg"><div class="fl">(ลงชื่อ)${pDot('')}${role}</div><div class="c">(${pDot(name, '52mm')})</div><div class="fl">ตำแหน่ง${pDot(pos, '58mm')}</div><div class="c">${label}</div><div class="c">วันที่${pDate(date, '13mm', '18mm', '16mm')}</div></div>`;
   return `<div class="pg rq">
   <div class="c b" style="font-size:17pt;margin-bottom:4mm">ใบเบิกพัสดุ</div>
   <div class="hd"><div></div><div class="fl">ใบเบิกเลขที่${pDot(dn[0])}/${pDot(dn[1])}</div></div>
@@ -903,13 +926,13 @@ function reqPrint(r) {
   <tbody>${rows.join('')}</tbody></table>
   <div class="sgs">
     ${sg('ผู้อนุมัติ', r.approver || '', st.head_position || '', 'หัวหน้าหน่วยพัสดุ', r.approve_date)}
-    ${sg('ผู้เบิกพัสดุ', r.requester || '', r.requester_position || '', 'หัวหน้าฝ่าย/กลุ่มงาน', r.date)}
-    ${sg('ผู้จ่ายพัสดุ', r.issuer || '', null, 'เจ้าหน้าที่พัสดุ', r.issue_date)}
-    ${sg('ผู้รับพัสดุ', iss ? (r.receiver || r.requester || '') : (r.receiver || ''), null, 'เจ้าหน้าที่', r.issue_date)}
+    ${sg('ผู้เบิกพัสดุ', '', '', 'หัวหน้าฝ่าย/กลุ่มงาน', r.date)}
+    ${sg('ผู้จ่ายพัสดุ', r.issuer || '', st.officer_position || '', 'เจ้าหน้าที่พัสดุ', r.issue_date)}
+    ${sg('ผู้รับพัสดุ', r.requester || '', r.requester_position || '', 'เจ้าหน้าที่', r.issue_date)}
   </div></div>`;
 }
 
-/* รายงานวัสดุคงเหลือ — ตามรูปที่ 2 */
+/* รายงานวัสดุคงเหลือ */
 function reportBody(rp) {
   const secs = rp.sections.length ? rp.sections : [{ category: '', rows: [], total: { old_val: 0, buy_val: 0, used_val: 0, new_val: 0 } }];
   const cols = [5, 24, 7, 6, 8, 6, 8, 6, 8, 6, 7, 9];
@@ -921,7 +944,7 @@ function reportBody(rp) {
   <tr class="b"><td colspan="4" class="c">รวมทั้งสิ้น</td><td class="r">${dash(s.total.old_val)}</td><td></td><td class="r">${dash(s.total.buy_val)}</td><td></td><td class="r">${dash(s.total.used_val)}</td><td></td><td></td><td class="r">${dash(s.total.new_val)}</td></tr></tbody></table></div>`).join('');
 }
 
-/* ทะเบียนคุมบัญชีวัสดุ — ตามรูปที่ 3 */
+/* ทะเบียนคุมบัญชีวัสดุ */
 function cardBody(c) {
   const it = c.item, per = 16, pages = [];
   for (let i = 0; i < Math.max(c.rows.length, 1); i += per) pages.push(c.rows.slice(i, i + per));

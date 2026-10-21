@@ -376,7 +376,8 @@ document.addEventListener('DOMContentLoaded', () => {
   S.role = role; S.token = store.get(LS.token) || '';
   if (role === 'ADMIN' && !S.token) { logoutLocal(); return; }
   loadCache(role);
-  showApp();      // เปิดหน้าทันที (ใช้ข้อมูลที่แคชไว้) แล้วค่อยโหลดข้อมูลล่าสุดเบื้องหลัง
+  showApp();      // เปิดหน้าทันทีจากแคชในเครื่อง ไม่รอ API
+  // ดึงข้อมูลล่าสุดเบื้องหลัง โดยไม่บล็อกการใช้งานหน้าเว็บ
   syncData(false);
 });
 function showLogin() { $('#app').hidden = true; $('#login').hidden = false; }

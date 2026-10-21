@@ -568,7 +568,7 @@ function linesEditor(kind, lines) {
 }
 function lineRow(kind, l) {
   const lb = l.item_id ? (S.labelById[l.item_id] || '') : '', it = S.itemById[l.item_id] || {};
-  const pick = `<td><input class="inp it-pick" list="dl-items" value="${esc(lb)}" placeholder="พิมพ์ค้นหาชื่อวัสดุ..."></td>`;
+  const pick = `<td><select class="inp it-pick" aria-label="เลือกวัสดุ"><option value="">-- เลือกวัสดุ --</option>${Object.keys(S.itemByLabel).map(label => `<option value="${esc(label)}" ${label === lb ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select></td>`;
   const del = '<td><button type="button" class="btn sm red" data-act="delLine"><i class="fa-solid fa-xmark"></i></button></td>';
   if (kind === 'rcv') return `<tr>${pick}<td><input class="inp q" type="number" min="0" step="any" value="${l.qty ?? ''}"></td><td><input class="inp pr" type="number" min="0" step="0.01" value="${l.unit_price ?? ''}"></td><td class="r amt">0.00</td>${del}</tr>`;
   return `<tr>${pick}<td class="c bal">${l.item_id ? fmtQ(it.balance) + ' ' + esc(it.unit || '') : '-'}</td><td><input class="inp q" type="number" min="0" step="any" value="${l.qty ?? ''}"></td>${del}</tr>`;
@@ -659,7 +659,7 @@ function reqForm(id) {
   const lines = (r.items || []).map(l => ({ item_id: l.item_id, qty: l.req_qty }));
   openModal(id ? 'แก้ไขใบเบิกเลขที่ ' + esc(r.doc_no) : 'ขอเบิกวัสดุ', `<form id="fReq" class="fg"><input type="hidden" name="id" value="${esc(r.id || '')}">
     <div class="c3"><label class="lb">ลงวันที่</label><input class="inp" type="date" name="date" value="${esc(r.date)}"></div>
-    <div class="c5"><label class="lb">กลุ่มงาน/ฝ่าย *</label><input class="inp" name="department" list="dl-depts" value="${esc(r.department)}"></div>
+    <div class="c5"><label class="lb">กลุ่มงาน/ฝ่าย *</label><select class="inp" name="department" required>${opts(st.departments, r.department, "-- เลือกกลุ่มงาน/ฝ่าย --")}</select></div>
     <div class="c4"><label class="lb">ประเภทวัสดุ</label><select class="inp" name="category">${opts(st.categories, r.category)}</select></div>
     <div class="c6"><label class="lb">เพื่อใช้ในงาน/โครงการ</label><input class="inp" name="project" value="${esc(r.project)}"></div>
     <div class="c6"><label class="lb">ขอมอบให้ (ผู้รับสิ่งของแทน)</label><input class="inp" name="receiver" value="${esc(r.receiver)}"></div>
